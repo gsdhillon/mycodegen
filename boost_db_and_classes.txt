@@ -1,0 +1,1829 @@
+CREATE TABLE PKI_PRO_RECORDS 
+(
+  XML_VERSION INT NOT NULL 
+, FORM_ID INT NOT NULL 
+, EMP_NO INT NOT NULL 
+, NAME VARCHAR(62) NOT NULL 
+, DIVISION_NO VARCHAR(5) NOT NULL 
+, DIVISION VARCHAR(100 ) NOT NULL 
+, DESIG_SHORT_NAME VARCHAR(16 ) NOT NULL 
+, DATED DATE NOT NULL 
+, DATE_OF_VISIT DATE NOT NULL 
+, EXPECTED_TIME VARCHAR(8 ) NOT NULL 
+, PURPOSE VARCHAR(200 ) 
+, REMARKS VARCHAR(200 ) 
+, CURRENT_STATUS_NAME VARCHAR(50 ) NOT NULL 
+, PENDING_WITH_AUTH INT(7) 
+, PRIMARY KEY (FORM_ID )
+) ;
+
+CREATE TABLE PKI_PRO_VISITORS 
+(
+  FORM_ID INT(10) NOT NULL 
+, S_NO INT(10) NOT NULL 
+, NAME VARCHAR(100 ) NOT NULL 
+, GENDER VARCHAR(20 ) 
+, AGE INT(3) 
+, TYPE_OF_ID_PROOF VARCHAR(100 ) 
+, ID_PROOF_INT VARCHAR(100 ) 
+, PHONE_NO VARCHAR(20 ) 
+, ORGANISATION VARCHAR(100 ) 
+, DESIGNATION VARCHAR(100 ) 
+, PHOTO MEDIUMLOB 
+, ISSUE_RFID_CARD VARCHAR(5 ) NOT NULL 
+, PRIMARY KEY (FORM_ID , S_NO )
+
+);
+
+
+
+
+
+package BOOSTServletCode.WorkFlowApps.PROPermitApplication;
+
+import BOOSTAppletCode.BOOSTData.BARCEmployee;
+import BOOSTAppletCode.WorkFlowApps.PROPermitApplication.PROPermitForm;
+import BOOSTAppletCode.WorkFlowApps.PROPermitApplication.PROVisitor;
+import BOOSTServerLib.AS;
+import BOOSTServletCode.MyDBPackage.MyDBConnection;
+import java.sql.PreparedStatement;
+import BOOST_PKI_LIB.Packetizer;
+import BOOST_WORKFLOW_LIB.application_form.ApplicationObject;
+import BOOST_WORKFLOW_LIB.application_form.BARCAuthSign;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.ArrayList;
+/**
+ * 
+ * @author Gurmeet Singh, gsdhillon@gmail.com
+ */
+public class PROPermitClass {
+    /**
+     * Constructor
+     */
+    private PROPermitClass(){
+    }
+    /**
+     * 
+     * @param newStatus
+     * @param applicant
+     * @return 
+     */
+    public static String getNewAuth(String newStatus, BARCEmployee applicant) {
+        switch (newStatus) {
+            case "PendingAtDivHead":
+                return "24196";
+            case "PendingAtPRO":
+                return "24196";
+            case "PendingAtASO":
+                return "24196";
+            default:
+                return "NULL";
+        }
+    }
+    /**
+     * Completed=Yes, Tested=No 
+     * @param form
+     * @return
+     */
+    public static ApplicationObject submitNewForm(PROPermitForm form) {
+        MyDBConnection conn = null;
+        Statement stmt = null;
+        String query = "";
+        ApplicationObject response = new ApplicationObject();
+        try {
+            //open data base connection
+            conn = AS.getDBConnection();
+            conn.setAutoCommit(false);
+            stmt = conn.createStatement();
+            query = "select PKI_PRO_ID_SEQUENCE.nextval from dual";
+            int formID;
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                if (!rs.next()) {
+                    rs.close();
+                    throw new Exception("Submit "+form.appShortName+" form failed");
+                }
+                formID =rs.getInt(1);
+            }
+            //insert master record
+            query =
+            "insert into PKI_PRO_RECORDS("
+                    + "XML_VERSION, "
+                    + "FORM_ID,"
+                    + "EMP_NO,"
+                    + "NAME,"
+                    + "DESIG_SHORT_NAME,"
+                    + "DIVISION_NO,"
+                    + "DIVISION,"
+                    + "DATED,"
+                    + "REMARKS, "
+                    //---------------------------
+                    + "DATE_OF_VISIT,"
+                    + "EXPECTED_TIME,"
+                    + "PURPOSE, "
+                    //----------------------------------
+                    + "CURRENT_STATUS_NAME, "
+                    + "PENDING_WITH_AUTH "
+            + ") values ("
+                    + form.xmlVersion+", "
+                    + "?, " //FORM_ID 1
+                    + "?, " //EMP_NO 2
+                    + "?, " //NAME 3
+                    + "?, " //DESIG_SHORT_NAME 4
+                    + "?, " //DIVISION_NO 5
+                    + "?, "  //DIVISION 6
+                    + "sysdate, "//DATED
+                    + "?, "//REMARKS 7
+                    //---------------------------
+                    + "to_date(?, 'DD/MM/YYYY'), " //DATE_OF_VISIT 8
+                    + "?, " //EXPECTED_TIME 9
+                    + "?, " //PURPOSE 10
+                    //----------------------------------
+                    + "'"+form.currentStatus+"', "
+                    + form.pendingWithAuthEmpNo+" "
+            + ")";
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                ps.setInt(1, formID);
+                ps.setString(2, form.applicant.empNo);
+                ps.setString(3, form.applicant.name);
+                ps.setString(4, form.applicant.desigShortName);
+                ps.setString(5, form.applicant.divNo);
+                ps.setString(6, form.applicant.divFullName);
+                ps.setString(7, form.remarks);
+                ps.setString(8, form.dateOfVisit);
+                ps.setString(9, form.expectedTime);
+                ps.setString(10, form.purpose);
+                if (ps.executeUpdate() != 1) {
+                    throw new Exception("Submit "+form.appShortName+" form for failed!");
+                }
+            }    
+   
+            // insert visitors details
+            query =
+            "insert into PKI_PRO_VISITORS ( "
+                    + "FORM_ID,"
+                    + "S_NO,"
+                    + "NAME,"
+                    + "GENDER, "
+                    + "AGE, "
+                    + "ORGANISATION, "
+                    + "DESIGNATION, "
+                    + "PHONE_NO, "
+                    + "TYPE_OF_ID_PROOF, "
+                    + "ID_PROOF_INT, "
+                    + "ISSUE_RFID_CARD "
+            + ") values ("
+                    + formID + ", "
+                    + "?, "//1  S_NO
+                    + "?, "//2  NAME
+                    + "?, "//3  GENDER
+                    + "?, "//4  AGE
+                    + "?, "//5  ORGANISATION
+                    + "?, "//6  DESIGNATION
+                    + "?, "//7  PHONE_NO
+                    + "?, "//8  TYPE_OF_ID_PROOF
+                    + "?, "//9  ID_PROOF_INT
+                    + "? " //10 ISSUE_RFID_CARD
+            + ")";
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                for (int i = 0; i < form.visitors.length; i++){
+                    PROVisitor visitor = form.visitors[i];
+                    ps.setInt(1, (i+1));
+                    ps.setString(2, visitor.name);
+                    ps.setString(3, visitor.gender);
+                    ps.setInt(4, visitor.getAge());
+                    ps.setString(5, visitor.org);
+                    ps.setString(6, visitor.desig);
+                    ps.setString(7, visitor.phone);
+                    ps.setString(8, visitor.idType);
+                    ps.setString(9, visitor.idNo);
+                    ps.setString(10, visitor.issueRFIDCard);
+                    if (ps.executeUpdate() != 1) {
+                        throw new Exception("Submit "+form.appShortName+" form for failed !");
+                    }
+                }
+            }
+            //Close the statement, and the connection
+            conn.commit();
+            response.servletResponse =  "OK:" + formID;   
+            return response;
+        } catch (Exception e) {
+            System.out.println("Submit "+form.appShortName+" query: "+query);
+            AS.logException(e, PROPermitClass.class);
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
+            }
+            response.servletResponse = "ERROR:Submit "+form.appShortName+" from failed!;"
+                    + "Kindly contact SAS section, Computer Division, BARC ph. 022-25592906/3804";
+            return response;
+        } finally {
+            AS.close(stmt, conn);
+        }
+    }
+    /**
+     * Completed=Yes, Tested=No
+     * @param formID
+     * @return 
+     */
+    public static ApplicationObject getForm(String formID) {
+        MyDBConnection conn = null;
+        Statement stmt = null;
+        String query = "";
+        PROPermitForm form = new PROPermitForm();
+        try {
+            //open data base connection
+            conn = AS.getDBConnection();
+            stmt = conn.createStatement();
+            //get master record
+            query =
+            "select "
+                    + "XML_VERSION, "
+                    + "FORM_ID,"
+                    + "EMP_NO,"
+                    + "NAME,"
+                    + "DESIG_SHORT_NAME,"
+                    + "DIVISION_NO,"
+                    + "DIVISION,"
+                    + "to_char(DATED,'dd/mm/yyyy') DATED, "
+                    + "REMARKS, "
+                    //---------------------------
+                    + "to_char(DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+                    + "EXPECTED_TIME,"
+                    + "PURPOSE, "
+                    //----------------------------------
+                    + "CURRENT_STATUS_NAME, "
+                    + "PENDING_WITH_AUTH, "
+                    + "TO_CHAR(SYSDATE, 'DD/MM/YYYY HH24:MI:SS') TODAY_DATE_TIME "
+            + "from "
+                    + "PKI_PRO_RECORDS "
+            + "where "
+                    + "FORM_ID = " + formID;   
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                rs.next();
+                form.xmlVersion = rs.getInt("XML_VERSION");
+                form.formID = rs.getString("FORM_ID");
+                form.applicant.empNo = rs.getString("EMP_NO");
+                form.applicant.name = rs.getString("NAME");
+                form.applicant.desigShortName = rs.getString("DESIG_SHORT_NAME");
+                form.applicant.divNo = rs.getString("DIVISION_NO");
+                form.applicant.divFullName = rs.getString("DIVISION");
+                form.applyDate = rs.getString("DATED");
+                form.remarks = rs.getString("REMARKS");
+                //---------------------------
+                form.dateOfVisit = rs.getString("DATE_OF_VISIT");
+                form.expectedTime = rs.getString("EXPECTED_TIME");
+                form.purpose = rs.getString("PURPOSE");
+                //----------------------------------
+                form.currentStatus = rs.getString("CURRENT_STATUS_NAME");
+                form.pendingWithAuthEmpNo = rs.getString("PENDING_WITH_AUTH");
+                form.dbDateTime = rs.getString("TODAY_DATE_TIME");
+            }
+            //fetch current status code from current status
+            form.currentStatusCode = getStatusCode(stmt, form.currentStatus);
+            
+            //get visitoe list
+            query = 
+            "select "
+                    + "NAME,"
+                    + "GENDER, "
+                    + "AGE, "
+                    + "ORGANISATION, "
+                    + "DESIGNATION, "
+                    + "PHONE_NO, "
+                    + "TYPE_OF_ID_PROOF, "
+                    + "ID_PROOF_INT, "
+                    + "ISSUE_RFID_CARD "
+            + "from "
+                    + "PKI_PRO_VISITORS "
+            + "where "
+                    + "FORM_ID = "+formID+" "
+            + "ORDER BY "
+                    + "S_NO asc";
+            ArrayList<PROVisitor> visitorList = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                while(rs.next()) {
+                    PROVisitor visitor = new PROVisitor();
+                    visitor.name = rs.getString("NAME");
+                    visitor.gender = rs.getString("GENDER");
+                    visitor.age = rs.getString("AGE");
+                    visitor.org = rs.getString("ORGANISATION");
+                    visitor.desig = rs.getString("DESIGNATION");
+                    visitor.phone = rs.getString("PHONE_NO");
+                    visitor.idType = rs.getString("TYPE_OF_ID_PROOF");
+                    visitor.idNo = rs.getString("ID_PROOF_INT");
+                    visitor.issueRFIDCard = rs.getString("ISSUE_RFID_CARD");
+                    visitorList.add(visitor);
+                }
+            }
+            form.visitors = (PROVisitor[])visitorList.toArray(new PROVisitor[visitorList.size()]);
+           
+            //ADD ALL AUTH_SIGNS
+            query = 
+            "SELECT "
+                + "AUTH_SNO, "
+                + "AUTH_EMP_NO,"
+                + "AUTH_NAME,"
+                + "AUTH_DESIG,"
+                + "AUTH_ROLE,"
+                + "AUTH_ACTION,"
+                + "NVL(AUTH_REMARKS, ' ') AUTH_REMARKS,"
+                + "AUTH_TYPE,"
+                + "AUTH_CERT_SNO,"
+                + "AUTH_SIGN,"
+                + "TO_CHAR(AUTH_SIGN_DATE, 'DD/MM/YYYY HH24:MI:SS') AUTH_SIGN_DATE "
+            + "FROM "
+                    + "PKI_PRO_SIGNS "
+            + "WHERE "
+                    + "FORM_ID= '" + formID + "' "
+            + "ORDER BY "
+                    + "AUTH_SNO ASC";
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                while (rs.next()) {
+                    BARCAuthSign authSign = new BARCAuthSign();
+                    authSign.authSNo = rs.getInt("AUTH_SNO");
+                    authSign.empNo = rs.getString("AUTH_EMP_NO");
+                    authSign.name = rs.getString("AUTH_NAME");
+                    authSign.desigShortName = rs.getString("AUTH_DESIG");
+                    authSign.role = rs.getString("AUTH_ROLE");
+                    authSign.action = rs.getString("AUTH_ACTION");
+                    authSign.remarks = rs.getString("AUTH_REMARKS");
+                    authSign.authType = rs.getString("AUTH_TYPE");
+                    authSign.cert_sno = rs.getString("AUTH_CERT_SNO");
+                    if(authSign.cert_sno == null){
+                        authSign.cert_sno = "";
+                    }
+                    authSign.sign = rs.getString("AUTH_SIGN");
+                    authSign.signDate = rs.getString("AUTH_SIGN_DATE");
+                    form.addExistingAuthSign(authSign);
+                }
+            }
+            //FETCH WORK FLOW DETAILS 
+            query = 
+            "SELECT "
+                + "(SELECT STATUS_NAME FROM PKI_PRO_STATUS_LIST WHERE STATUS_CODE = A.NEXT_STATUS_CODE_ON_YES) NEXT_STATUS_ON_YES, "
+                + "(SELECT STATUS_NAME FROM PKI_PRO_STATUS_LIST WHERE STATUS_CODE = A.NEXT_STATUS_CODE_ON_NO) NEXT_STATUS_ON_NO, "
+                + "AUTH_ROLE, "
+                + "YES_ACTION, "
+                + "NO_ACTION, "
+                + "AUTH_TYPE_REQUIRED "
+            + "FROM "
+                + "PKI_PRO_WORK_FLOW A "
+            + "WHERE "
+                + "CURRENT_STATUS_CODE = " + form.currentStatusCode;
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                if (rs.next()) {
+                    form.nextStatusOnYes = rs.getString("NEXT_STATUS_ON_YES");
+                    form.nextStatusOnNo = rs.getString("NEXT_STATUS_ON_NO");
+                    form.currentAuthRole = rs.getString("AUTH_ROLE");
+                    form.currentAuthYesAction = rs.getString("YES_ACTION");
+                    form.currentAuthNoAction = rs.getString("NO_ACTION");
+                }
+            }
+            
+            //set response code and return
+            form.servletResponse = "OK:"+form.appShortName+" from form_id = "+formID+" fetched successfully.";
+            return form;
+        }catch (Exception e) {
+            System.out.println("Get "+form.appShortName+" query: "+query);
+            AS.logException(e, PROPermitClass.class);
+            ApplicationObject response = new ApplicationObject();
+            response.servletResponse = "ERROR:Could not get "+form.appShortName+" form; FormID="+formID;
+            return response;
+        } finally {
+            AS.close(stmt, conn);
+        }
+    }//end of get form
+    
+    /**
+     * Completed=Yes, Tested=No
+     * @param stmt
+     * @param ewrForm
+     * @throws Exception 
+     */
+    private static String getStatusCode(Statement stmt, String statusName) throws Exception{
+        ResultSet rs = stmt.executeQuery(
+            "SELECT "
+                    + "STATUS_CODE "
+            + "FROM "
+                    + "PKI_PRO_STATUS_LIST "
+            + "WHERE "
+                    + "STATUS_NAME = '"+statusName+"'"
+        );
+        if(rs.next()){
+            int statusCode = rs.getInt("STATUS_CODE");
+            rs.close();
+            return String.valueOf(statusCode);
+        }else{
+            throw new Exception("Status name "+statusName+" is unknown!");
+        }
+    }
+
+    /**
+     * Completed=Yes, Tested=No
+     * @param stmt
+     * @param ewrForm
+     * @throws Exception 
+     */
+    private static void reCheckCurrentStatus(Statement stmt, PROPermitForm form) throws Exception{
+        String query = 
+        "select "
+                + "CURRENT_STATUS_NAME "
+        + "from "
+                + "PKI_PRO_RECORDS "
+        + "where "
+                + "FORM_ID = " + form.formID;
+        String status;
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            rs.next();
+            status = rs.getString("CURRENT_STATUS_NAME");
+        }
+        //status != null is for old forms
+        if (status == null || !status.equals(form.currentStatus)) {
+            throw new Exception("Status UpdatedByOther. formID="+form.formID+", newStatus="+status);
+        }
+    }
+    
+    /**
+     * Completed=Yes, Tested=No 
+     * @param form
+     * @return 
+     */
+    public static synchronized ApplicationObject saveAfterAuthSign(PROPermitForm form) {
+        MyDBConnection conn = null;
+        Statement stmt = null;
+        String query = "";
+        ApplicationObject response = new ApplicationObject();
+        try {
+            BARCAuthSign auth = form.getCurrentAuth();
+            //get conn and save data
+            conn = AS.getDBConnection();
+            conn.setAutoCommit(false);
+            stmt = conn.createStatement();
+            //check old status for synch pupose
+            reCheckCurrentStatus(stmt, form);
+            //insert new sign
+            query = 
+            "insert into PKI_PRO_SIGNS ("
+                + "FORM_ID, "
+                + "AUTH_SNO, "
+                + "AUTH_EMP_NO, "
+                + "AUTH_NAME, "//1
+                + "AUTH_DESIG, "//2
+                + "AUTH_ROLE, "
+                + "AUTH_ACTION, "
+                + "AUTH_REMARKS, "//3
+                + "AUTH_TYPE, "
+                + "AUTH_CERT_SNO, "
+                + "AUTH_SIGN, "
+                + "AUTH_SIGN_DATE "
+            + ") values ("
+                    + form.formID + ","
+                    + auth.authSNo + ", "
+                    + auth.empNo + ", "
+                    + "?, "//1 Name
+                    + "?, "//2 Desig
+                    + "'"+auth.role+"', "
+                    + "'"+auth.action+"', "
+                    + "?, "//3 Remarks
+                    + "'" + auth.authType + "', "
+                    + "'" + auth.cert_sno + "', "
+                    + "'" + auth.sign + "', "
+                    + "to_date('" + auth.signDate + "','DD/MM/YYYY HH24:MI:SS')"
+            + ")";
+            //
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                ps.setString(1, auth.name);
+                ps.setString(2, auth.desigShortName);
+                ps.setString(3, auth.remarks);
+                ps.executeUpdate();
+            }
+            
+            //update current status and pending with auth_emp_no
+            String pendingWithAuth = getNewAuth(form.newStatus, form.applicant);
+            //
+            query = 
+            "update "
+                    + "PKI_PRO_RECORDS "
+            + "set "
+                    + "CURRENT_STATUS_NAME = '" + form.newStatus + "', "
+                    + "PENDING_WITH_AUTH = "+pendingWithAuth+" "
+            + "where "
+                    + "FORM_ID = " + form.formID;
+            stmt.executeUpdate(query);
+            
+            //Reflect Approved application 
+//            if (form.newStatus.equals("Approved")) {
+//                
+//            } else if( form.newStatus.equals("Cancelled")) {
+//                
+//            }
+            
+            //
+            conn.commit();
+            System.out.println(PROPermitForm.APP_SHORT_NAME+" "+form.formID+" newStatus: '"+form.newStatus+"' pendingWithAyth: "+pendingWithAuth);
+            response.servletResponse = "OK:"+form.appShortName+" form has been submitted after sign; FORM_ID = " + form.formID;
+            return response;
+        } catch (Exception e) {
+            System.out.println("Query: "+query);
+            AS.logException(e, PROPermitClass.class);
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (Exception e1) {
+                }
+            }
+            response.servletResponse = "ERROR:Exception on submit "+form.appShortName+" form after sign; " + e.getMessage();
+            return response;
+        } finally {
+            AS.close(stmt, conn);
+        }
+    }
+    
+    /**
+     * Completed=Yes, Tested=No 
+     * @param stmt
+     * @param empno
+     * @param year
+     * @param p
+     * @throws Exception 
+     */
+    public static void addAppliedForms(Statement stmt, String empno, String year, Packetizer p)throws Exception {
+        String query =
+        "select "
+            + "A.FORM_ID, "
+            + "to_char(A.DATED,'dd/mm/yyyy') DATED, "                
+            //------
+            + "to_char(A.DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+            + "(select count(*) from PKI_PRO_VISITORS where FORM_ID = A.FORM_ID ) NUM_VISITORS, "   
+            //------
+            + "A.CURRENT_STATUS_NAME "
+        + "from "
+            + "PKI_PRO_RECORDS A "
+        + "where "
+            + "EMP_NO = " + empno + " AND "
+            + "to_char(A.DATED, 'yyyy')= '" + year + "' "
+        + "ORDER BY "
+            + "A.DATED DESC";
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next()) {
+                p.addString(PROPermitForm.APP_SHORT_NAME);
+                p.addString(rs.getString("FORM_ID"));
+                p.addString(rs.getString("DATED"));
+                //------
+                String desc =  
+                        PROPermitForm.APP_FULL_NAME + 
+                        " on "+ rs.getString("DATE_OF_VISIT") + 
+                        " for "+ rs.getInt("NUM_VISITORS")+" visitors";
+                p.addString(desc);
+                //------
+                p.addString(rs.getString("CURRENT_STATUS_NAME"));
+                p.addString("N"); //cancel allowed
+                p.incrCounter();
+            }
+        }
+    }
+    
+    /**
+     * Completed=Yes, Tested=No 
+     * @param stmt
+     * @param empno
+     * @param p
+     * @throws Exception 
+     */
+    public static void addDocsForSign(Statement stmt, String empno, Packetizer p) throws Exception{
+        String query = 
+        "SELECT "
+            + "FORM_ID,"
+            + "NAME,"
+            + "DESIG_SHORT_NAME,"
+            + "TO_CHAR(DATED,'DD/MM/YYYY') DATED, "
+            //------
+            + "to_char(A.DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+            + "(select count(*) from PKI_PRO_VISITORS where FORM_ID = A.FORM_ID ) NUM_VISITORS, "   
+            //------
+            + "(SELECT AUTH_ACTION FROM PKI_PRO_WORK_FLOW WHERE CURRENT_STATUS_CODE = (SELECT STATUS_CODE FROM PKI_PRO_STATUS_LIST WHERE STATUS_NAME = A.CURRENT_STATUS_NAME)) AUTH_ACTION " 
+        + "FROM "
+            + "PKI_PRO_RECORDS A "
+        + "WHERE "
+            + "PENDING_WITH_AUTH = "+empno;            
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            while(rs.next()){
+                p.addString(PROPermitForm.APP_SHORT_NAME);
+                p.addString(rs.getString("FORM_ID"));
+                p.addString(rs.getString("NAME"));
+                p.addString(rs.getString("DESIG_SHORT_NAME"));
+                p.addString(rs.getString("DATED"));
+                //------
+                String desc =  
+                        PROPermitForm.APP_FULL_NAME + 
+                        " on "+ rs.getString("DATE_OF_VISIT") + 
+                        " for "+ rs.getInt("NUM_VISITORS")+" visitors";
+                p.addString(desc);
+                //------
+                p.addString(rs.getString("AUTH_ACTION"));
+                p.incrCounter();
+            }
+        }
+    }
+    
+    /**
+     * Completed=Yes, Tested=No 
+     * @param stmt
+     * @param empno
+     * @param yyyy
+     * @param p
+     * @throws Exception 
+     */
+    public static void addSignedDocuments(Statement stmt, String empno, String yyyy, Packetizer p) throws Exception{
+        String query =
+        "select "
+            + "A.FORM_ID, "
+            + "A.NAME, "
+            + "A.DESIG_SHORT_NAME,"
+            //------
+            + "to_char(A.DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+            + "(select count(*) from PKI_PRO_VISITORS where FORM_ID = A.FORM_ID ) NUM_VISITORS, "   
+            //------
+            + "to_char(B.AUTH_SIGN_DATE, 'dd/mm/yyyy') AUTH_SIGN_DATE, "
+            + "B.AUTH_ACTION,"                                
+            + "B.AUTH_REMARKS "
+        + "from "
+            + "PKI_PRO_RECORDS A, "
+            + "PKI_PRO_SIGNS B "
+        + "where "
+            + "A.FORM_ID = B.FORM_ID AND "
+            + "B.AUTH_EMP_NO = " + empno + " AND "
+            + "to_char(B.AUTH_SIGN_DATE, 'yyyy') = '" + yyyy + "' "
+        + "ORDER BY "
+            + "AUTH_SIGN_DATE DESC";        
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next()) {
+                p.addString(PROPermitForm.APP_SHORT_NAME);
+                p.addString(rs.getString("FORM_ID"));
+                p.addString(rs.getString("NAME"));
+                p.addString(rs.getString("DESIG_SHORT_NAME"));
+                //------
+                String desc =  
+                        PROPermitForm.APP_FULL_NAME + 
+                        " on "+ rs.getString("DATE_OF_VISIT") + 
+                        " for "+ rs.getInt("NUM_VISITORS")+" visitors";
+                p.addString(desc);
+                //------
+                p.addString(rs.getString("AUTH_SIGN_DATE"));
+                p.addString(rs.getString("AUTH_ACTION"));
+                p.addString(rs.getString("AUTH_REMARKS"));
+                p.incrCounter();
+            }
+        }
+    }
+    
+    /**
+     * Signed by retired authorities also
+     * Completed=Yes, Tested=No 
+     * @param stmt
+     * @param fromDate
+     * @param toDate
+     * @param empNo
+     * @param p
+     * @throws Exception 
+     */
+    public static void addAllSignedFormsForOffice(Statement stmt, String fromDate, String toDate, String empNo, Packetizer p) throws Exception{
+        //get after approve
+        String query =
+        "SELECT "
+            + "A.FORM_ID, "
+            + "A.NAME, "
+            + "A.DESIG_SHORT_NAME, "
+            + "C.DIVISION_NO, "
+            + "(SELECT DIV_SHORT_NAME FROM DIVISION_LIST WHERE DIVISION_NO=C.DIVISION_NO) APPLICANTDIVNAME,  " 
+            + "to_char(A.DATED,'dd/mm/yyyy') DATED, "
+            //------
+            + "to_char(A.DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+            + "(select count(*) from PKI_PRO_VISITORS where FORM_ID = A.FORM_ID ) NUM_VISITORS, "   
+            //------
+            + "to_char(B.AUTH_SIGN_DATE,'dd/mm/yyyy') AUTH_SIGN_DATE, "
+	    + "B.AUTH_NAME , "
+            + "B.AUTH_ACTION,"                
+            + "B.AUTH_REMARKS, "
+            + "A.CURRENT_STATUS_NAME " +
+        "FROM " +
+            "PKI_PRO_RECORDS A, " +
+            "PKI_PRO_SIGNS B," +
+            "PKI_EMP_INFO_ALL C " +  
+        "WHERE " +
+	    "A.FORM_ID = B.FORM_ID  AND " +
+            "A.EMP_NO=C.EMP_NO  AND "  + 
+            "B.AUTH_EMP_NO = " + empNo + "  AND " +
+             "TO_DATE(B.AUTH_SIGN_DATE,'DD/MM/YY') BETWEEN  " +
+             "TO_DATE ('" + fromDate + "', 'DD/MM/YY') " +
+             "AND " +
+             "TO_DATE ('" + toDate + "', 'DD/MM/YY') " +
+        "ORDER BY "
+                + "FORM_ID";
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            while(rs.next()){
+                p.addString(PROPermitForm.APP_SHORT_NAME);
+                p.addString(rs.getString("FORM_ID"));
+                p.addString(rs.getString("NAME"));
+                p.addString(rs.getString("DESIG_SHORT_NAME"));
+                p.addString(rs.getString("APPLICANTDIVNAME"));
+                //------
+                String desc =  
+                        PROPermitForm.APP_FULL_NAME + 
+                        " on "+ rs.getString("DATE_OF_VISIT") + 
+                        " for "+ rs.getInt("NUM_VISITORS")+" visitors";
+                p.addString(desc);
+                //------
+                p.addString(rs.getString("AUTH_SIGN_DATE"));
+                p.addString(rs.getString("CURRENT_STATUS_NAME"));
+                p.incrCounter();
+            }
+        }
+    }
+    
+    /**
+     * Completed=Yes, Tested=No 
+     * @param stmt
+     * @param divNo
+     * @param year
+     * @param empNo
+     * @param p
+     * @throws Exception 
+     */
+    public static void addAllFormsForOffice(Statement stmt, String divNo, String year, String empNo, Packetizer p) throws Exception{
+         //get after approve
+        String query =
+        "select " 
+            + "FORM_ID, "
+            + "NAME, "
+            + "DESIG_SHORT_NAME, "
+            + "to_char(DATED,'dd/mm/yyyy') DATED, "
+             //------
+            + "to_char(A.DATE_OF_VISIT,'dd/mm/yyyy') DATE_OF_VISIT, "
+            + "(select count(*) from PKI_PRO_VISITORS where FORM_ID = A.FORM_ID ) NUM_VISITORS, "   
+            //------
+            + "CURRENT_STATUS_NAME " +
+        "from " +
+            "PKI_PRO_RECORDS  " +
+        "where " +
+            "to_char(DATED, 'yyyy')= '"+year+"'  ";
+        //empno or divno condition
+        if(!"".equals(empNo)){
+            query += " AND EMP_NO = "+empNo;
+        }else{
+            query += "AND DIVISION_NO = '"+divNo+"'";
+        }
+        //
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            while(rs.next()){
+                p.addString(PROPermitForm.APP_SHORT_NAME);
+                p.addString(rs.getString("FORM_ID"));
+                p.addString(rs.getString("NAME"));
+                p.addString(rs.getString("DESIG_SHORT_NAME"));
+                //------
+                String desc =  
+                        PROPermitForm.APP_FULL_NAME + 
+                        " on "+ rs.getString("DATE_OF_VISIT") + 
+                        " for "+ rs.getInt("NUM_VISITORS")+" visitors";
+                p.addString(desc);
+                //------
+                p.addString(rs.getString("DATED"));
+                p.addString(rs.getString("CURRENT_STATUS_NAME"));
+                p.incrCounter();
+            }
+        }
+    }
+}
+
+
+
+
+
+
+package BOOST_WORKFLOW_LIB.application_form;
+
+import BOOSTAppletCode.BOOSTData.BARCEmployee;
+import BOOST_PKI_LIB.security.BARCToken;
+import BOOST_PKI_LIB.security.Base64;
+import BOOST_PKI_LIB.Depacketizer;
+import BOOST_PKI_LIB.security.MyHash;
+import BOOST_PKI_LIB.security.PKI;
+import BOOST_PKI_LIB.security.VerifyResult;
+import BOOST_PKI_LIB.server_connection.MSC;
+import java.io.Serializable;
+import BOOST_GUI.guilib.MyBorderFactory;
+import javax.swing.JEditorPane;
+import javax.swing.JOptionPane;
+import javax.swing.JScrollBar; 
+import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
+import BOOST_WORKFLOW_LIB.html.HTML;
+import java.awt.Dimension;
+import java.awt.Font;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+/** 
+ * last refactoring is done by gurmeet on 28/09/2015 
+ * - todayDate renamed to dbDateTime
+ * - applicant and applyDate moved to ApplicationForm itself
+ * - application header and applicant name in makeHTML and makeXML are added 
+ * - numAuth, BARCAuth renamed to INTOfSignatures, BARCAuthSign ...
+ * last refactoring is done by gurmeet on 06/08/2015 
+ * this is a parent class of of application forms
+ * it has common data fields like apply date, applicant info , all auths info, 
+ * status, remark. It manages showing html/xml data, processing applications 
+ * by all authorities in the work flow.
+ * @author Gurmeet Singh, gsdhillon@gmail.com
+ */
+@SuppressWarnings("UseSpecificCatch")
+public abstract class ApplicationForm extends ApplicationObject implements Serializable {
+    public boolean debug = false;//set it to true from the individual application
+    private static final String CHAR_SET = "UTF-8";
+    //1-Application Head for XML/HTML is not added
+    //> 1-Application Head for XML/HTML is added by ApplicationForm 
+    //for new applications set frameWorkVersion = 2
+    private int frameWorkVersion = 1;
+    public String appShortName = "NOT_SET";
+    public String appFullName = "NOT_SET";
+    private String servletName = "NOT_SET"; 
+    public int xmlVersion = 0;
+    //
+    public int htmlTableWidth = 700;
+    public int maxDays = 30;
+    public int pastDays = 90;
+    public int futureDays = 90;
+    public String dbDateTime = "";//dd/mm/yyyy hh24:mi:ss
+    
+    public String organizationFullName = "Bhabha Atomic Research Centre, Mumbai";
+    //applicant and applyDate added on 28/09/2015
+    //TODO remove from all child classes 
+    public BARCEmployee applicant = new BARCEmployee();
+    public String applyDate;
+    //
+    public String state = "";
+    public String remarks = "";
+    public String pendingWithAuthEmpNo = "";//added on 30/09/2015
+    //all signatures
+    public int INTOfSigns = 0;
+    public BARCAuthSign[] authSignsList = new BARCAuthSign[50];
+    protected int authSignIndex = -1;
+    //current status 
+    public String currentStatusCode = "";
+    public String currentStatus = "";//PendingAtRecommender, PendingAtApprover etc
+    //next status (on YES/NO actions), role, YES/NO action name, auth type required ('W'/'S') [taken from workflow table]
+    public String currentAuthRole = "";
+    public String currentAuthYesAction = "";
+    public String currentAuthNoAction = "";
+    public String nextStatusOnYes = "";
+    public String nextStatusOnNo = "";
+    public String currentAuthRequiredType = "";// S means - DigSign is must
+    //new status
+    public String newStatus = "";
+    //
+    protected JEditorPane editorPane = null;
+    protected boolean viewXMLFlag = false;
+    protected JScrollPane sp;
+    public boolean htmlWithPhoto = false;
+    /**
+     * for applications before extra_work_reg
+     */
+    public ApplicationForm(){
+    }
+    
+   
+    /**
+     * 
+     * @param frameworkVersion
+     * @param appShortName
+     * @param appFullName
+     * @param servletName
+     * @param currentXMLVersion 
+     */
+    public ApplicationForm(int frameworkVersion, String appShortName, String appFullName, String servletName, int currentXMLVersion){
+        this.frameWorkVersion = frameworkVersion;
+        this.appShortName = appShortName;
+        this.appFullName = appFullName;
+        this.servletName = servletName;
+        this.xmlVersion = currentXMLVersion; 
+    }
+    
+    
+     /**
+     * 
+     * @param servletName
+     * @param formID
+     * @return
+     * @throws Exception 
+     */
+    public static ApplicationForm getForm(String servletName, String formID) throws Exception{
+        MSC msc = PKI.getMSC(servletName);
+        ApplicationObject applicationObjectOut = new ApplicationObject();
+        applicationObjectOut.servletAction = "get_form";
+        applicationObjectOut.formID = formID;
+        msc.writeObject(applicationObjectOut);
+        Object obj = msc.readObject();
+        msc.close();
+        //check received object is an instanceof ApplicationObject
+        if(!(obj instanceof ApplicationObject)){
+            throw new Exception("Unexpected object received from the server 1");
+        }
+        //check server response does not start with ERROR
+        ApplicationObject applicationObjectIn = (ApplicationObject)obj;
+        if(applicationObjectIn.servletResponse.startsWith("ERROR")){
+            throw new Exception(applicationObjectIn.servletResponse);
+        }
+        //check received object is an instanceof ApplicationForm
+        if(!(obj instanceof ApplicationForm)){
+            throw new Exception("Unexpected object received from the server 2");
+        }
+        ApplicationForm applicationForm = (ApplicationForm) obj;
+        return applicationForm;
+    }
+    
+    
+    
+    /**
+     * added on 30/09/2015
+     * @return 
+     */
+    public boolean submitNew() {
+        try{
+            validateData();
+            servletAction = "submit_new_form";
+            //
+            String response = ApplicationObject.submitObject(servletName, this);
+            PKI.showMessage(response);
+            //
+            return response.startsWith("OK");
+        }catch(Exception e){
+            PKI.showException("Submit "+appShortName+" form", e);
+            return false;
+        }
+    }
+    /**
+     * 
+     * @param authSNo
+     */
+    public void setCurrentAuthSNo(int authSNo){
+        authSignIndex = authSNo;
+    }
+    /**
+     *
+     * @return
+     */
+    public BARCAuthSign getCurrentAuth() {
+        BARCAuthSign auth = null;
+        if(authSignIndex > -1){
+           auth = authSignsList[authSignIndex];
+        }
+        return auth;
+    }
+    /**
+     * set auth_sno before adding
+     * @param authSign 
+     */
+    public void addExistingAuthSign(BARCAuthSign authSign){
+        authSignsList[INTOfSigns] = authSign;
+        authSignIndex = INTOfSigns;
+        INTOfSigns++;
+    }
+    /**
+     * 
+     * @param authSign
+     * @return '' 
+     */
+    public int addNewAuthSign(BARCAuthSign authSign){
+        authSignIndex = INTOfSigns;
+        //
+        authSignsList[authSignIndex] = authSign;
+        authSignsList[authSignIndex].role = currentAuthRole;
+        authSignsList[authSignIndex].authSNo = authSignIndex+1;
+        //
+        return INTOfSigns++;
+    }
+    /**
+     * 
+     * @return 
+     */
+    public String setYesAction(){
+        authSignsList[authSignIndex].remarks = "";
+        authSignsList[authSignIndex].sign = null;
+        authSignsList[authSignIndex].signDate = "";
+        authSignsList[authSignIndex].action = currentAuthYesAction;
+        newStatus = nextStatusOnYes;
+        refreshForm();
+        return newStatus;
+    }
+    /**
+     * 
+     * @return 
+     */
+    public String setNoAction(){
+        String rem = JOptionPane.showInputDialog("Please enter reason:");
+        if(rem != null ){
+            authSignsList[authSignIndex].remarks = rem;
+        }else{
+            authSignsList[authSignIndex].remarks = currentAuthRole+" Rejected";
+        }
+        authSignsList[authSignIndex].sign = null;
+        authSignsList[authSignIndex].signDate = "";
+        authSignsList[authSignIndex].action = currentAuthNoAction;
+        newStatus = nextStatusOnNo;
+        refreshForm();
+        return newStatus;
+    }
+    
+    /**
+     * 
+     * @return '' 
+     */
+    public String getHTMLFull(){
+        if(frameWorkVersion < 2){//frameWorkVersion == 1 older than extra work reg
+            StringBuilder html = new StringBuilder("<HTML><BODY>");
+            //form tables
+            html.append(getHTMLApplicationData());
+            //auth tables
+            html.append(HTML.gapTable());
+            for(int i= 0;i<INTOfSigns;i++){
+                html.append(getAuthTagHTML(i));
+            }
+            //status and remarks
+            html.append(getStatusAndRemarksTable());
+             //
+            html.append("</BODY></HTML>");
+            return html.toString();
+        }else{//frameWorkVersion == 2 from extra work reg onwards
+            StringBuilder html = new StringBuilder("<HTML><BODY>");
+            //application head
+            html.append(getHTMLApplicationHead());
+            //form tables
+            html.append(getHTMLApplicationData());
+            html.append(HTML.gapTable());
+            //auth tables
+            for(int i= 0;i<INTOfSigns;i++){
+                html.append(getAuthTagHTML(i));
+            }
+            //status and remarks
+            html.append(getStatusAndRemarksTable());
+            //
+            html.append("</BODY></HTML>");
+            return html.toString();
+        }
+    }
+    /**
+     * 
+     * @return '' 
+     */
+    public String getFileName(){
+        return "ForgnVisForm_"+formID+".html";
+    }
+    /**
+     * 
+     */
+    public void viewInXML(){
+        viewXMLFlag = true;
+        refreshForm();
+    }
+    /**
+     * 
+     */
+    public void viewInHTML(){
+        viewXMLFlag = false;
+        refreshForm();
+    }
+    /**
+     * 
+     * @return 
+     */
+    public JScrollPane getScrollPane(){
+        return getScrollPane(appShortName);
+    }
+    /**
+     * 
+     * @param heading
+     * @return 
+     */
+    public JScrollPane getScrollPane(String heading){
+        editorPane = new JEditorPane();
+        editorPane.setContentType("text/html");
+        editorPane.setEditable(false);
+        sp = new JScrollPane(editorPane);
+        sp.setBorder(MyBorderFactory.createTitledBorder(heading));
+        return sp;
+    }
+    /**
+     * 
+     */
+    @SuppressWarnings("Convert2Lambda")
+    public void gotoTop() {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                try{Thread.sleep(100);}catch(Exception e1){}
+                JScrollBar vsb = sp.getVerticalScrollBar();
+                vsb.setValue(vsb.getMinimum());
+                sp.validate();
+                sp.repaint();
+            }
+        });
+    }
+    /**
+     * 
+     */
+    public void refreshForm(){
+        if(viewXMLFlag){
+            editorPane.setContentType("text/plain");
+            editorPane.setText(getXMLFull(getCurrentAuth(), authSignIndex));
+            //NOTE: for signing getXMLForAuth(authSignIndex) is used
+            // editorPane.setText(getXMLForAuth(authSignIndex));//08/10/2015
+        }else{
+            String html = getHTMLFull();
+            editorPane.setContentType("text/html");
+            editorPane.setText(html);
+        }
+        editorPane.validate();
+    }
+    private boolean signGenerated;
+    public boolean isSignDone(){
+        return signGenerated;
+    }
+    /**
+     *
+     * @throws Exception
+     */
+    public void doAuthSign() throws Exception{
+        doAuthSign(authSignIndex);
+    }
+    /**
+     * 
+     */
+    public void verifyAndShowCurrentSign(){
+        try{
+            if(authSignIndex < 0){
+                PKI.showMessage("Document is not signed yet!!!");
+                return;
+            }
+            VerifyResult verifyResult = verifyAuthSign();
+            JTabbedPane tp = new JTabbedPane();
+            JTextArea ta1 = new JTextArea(verifyResult.desc);
+            ta1.setFont(new Font("MONOSPACED", Font.PLAIN, 14));
+            tp.addTab("Sign Verify Result", ta1);
+            JTextArea ta2 = new JTextArea(verifyResult.xmlText);
+            ta2.setFont(new Font("Courier New", Font.PLAIN, 12));
+            tp.addTab("XML Data", ta2);
+            //
+            JScrollPane sp1 = new JScrollPane(tp);
+            int w = tp.getPreferredSize().width + 30;
+            int h = tp.getPreferredSize().height + 30;
+            if (w > 1024) {
+                w = 1024;
+            }
+            if (h > 768) {
+                h = 768;
+            }
+            sp1.setPreferredSize(new Dimension(w, h));
+            JOptionPane.showMessageDialog(null, sp1, "BOOST Message", JOptionPane.INFORMATION_MESSAGE);
+//            JDialog d = new JDialog(new JFrame(), "BOOST Message", false);
+//            d.setLayout(new GridLayout(1,1));
+//            d.setSize(w, h);
+//            d.add(sp1);
+//            d.setLocationRelativeTo(null);
+//            d.setVisible(true);
+        }catch(Exception e){
+            PKI.showException("Verify sign: ", e);
+        }
+    }
+    /**
+     * 
+     * @return
+     * @throws Exception 
+     */
+    public VerifyResult verifyAuthSign() throws Exception{
+        return verifyAuthSign(authSignIndex);
+    }
+    /**
+     * 
+     * @param authNo
+     * @throws Exception 
+     */
+    public void doAuthSign(int authNo) throws Exception{
+        if(authSignsList[authNo] == null){
+            throw new Exception("AuthObject NULL authNo="+authNo);
+        }
+        if(authSignsList[authNo].action == null || 
+                authSignsList[authNo].action.equals("") || 
+                                authSignsList[authNo].action.equals("PENDING")){
+            throw new Exception("AuthAction not set");
+        }
+        //
+        signGenerated = false;
+        authSignsList[authNo].sign = null;
+        authSignsList[authNo].signDate = dbDateTime;
+        byte[] sign = null;
+        if(authSignsList[authNo].authType != null && authSignsList[authNo].authType.equals("W")){
+            if(!PKI.showConfirmDialog(
+                      "Since you don't have crypto token, only hash will be calculated\n"
+                    + "in place of actual digital signature.\n"
+                    + "Do you want to submit it without digital signature?")){
+                throw new Exception("Operation cancelled!");
+            }
+            authSignsList[authNo].cert_sno = "";//09/10/2015
+            byte[] doc = getXMLForAuth(authNo).getBytes(CHAR_SET);
+            sign = MyHash.getSha1(doc);
+            //***previously (before 08/10/2015) cert_sno was set to SHA1_HASH_ONLY after doing sign 
+        }else{
+            if(authSignsList[authNo].cert_sno == null || authSignsList[authNo].cert_sno.length()<=4){
+                throw new Exception("Certificate not uploaded at BOOST");
+            }
+            if(authSignsList[authNo].boostCert == null){
+                authSignsList[authNo].boostCert = BARCToken.getCurrentCertificate(authSignsList[authNo].empNo);
+            }
+            if(authSignsList[authNo].boostCert == null){
+                throw new Exception("No Certificate Found in Token");
+            }
+            if(!authSignsList[authNo].cert_sno.equals(authSignsList[authNo].boostCert.serialINT)){
+                throw new Exception("Certificate at BOOST does not match with certificate found in Token");
+            }
+            //added on 19/01/2017
+            PKI.checkValidity(authSignsList[authNo].boostCert);
+            //
+            byte[] doc = getXMLForAuth(authNo).getBytes(CHAR_SET);
+            sign = BARCToken.signDocWithCurrentKey(doc);
+        }
+        if(sign == null){
+            throw new Exception("sign = null");
+        }
+        authSignsList[authNo].sign = Base64.base64Encode(sign);
+        signGenerated = true;
+    }
+    /**
+     * 
+     * @param authNo
+     * @return
+     * @throws Exception 
+     */
+    public VerifyResult verifyAuthSign(int authNo) throws Exception{
+        VerifyResult result;
+        if(authSignsList[authNo].authType.equals("W")){
+            result = new VerifyResult();
+            authSignsList[authNo].cert_sno = "";//09/10/2015
+            String xmlText = getXMLForAuth(authNo);
+            byte[] doc = xmlText.getBytes();
+            result.xmlText = xmlText;
+            //
+            String calculatedHash = Base64.base64Encode(MyHash.getSha1(doc));
+            if(calculatedHash.equals(authSignsList[authNo].sign)){
+                result.valid = true;
+                result.desc = "SHA1 hash matched.\n";
+            }else{
+                result.valid = false;
+                result.desc = "SHA1 hash not matched!!!\n";
+            }
+        }else{
+            if(authSignsList[authNo].boostCert == null){
+                authSignsList[authNo].boostCert = PKI.getCert_SNO(authSignsList[authNo].cert_sno);
+            }
+            result = authSignsList[authNo].boostCert.verifySign(
+                getXMLForAuth(authNo),
+                authSignsList[authNo].sign
+            );
+        }
+        return result;
+    }
+    /**
+     * This method is started being used from EXTRA_WORK onwards
+     * @return 
+     */
+    private String getXMLApplicationHead() {
+        return
+        "<XML_VERSION>"+
+        xmlVersion+
+        "</XML_VERSION>\n"+
+        "<ORGANIZATION>"+organizationFullName+"</ORGANIZATION>\n" +
+        "<APPLICATION_HEAD>\n"+
+                "<SHORT_NAME>"+
+                appShortName+
+                "</SHORT_NAME>"+
+                "<REFERENCE_NO>"+
+                formID+
+                "</REFERENCE_NO>"+
+                "<DATED>"+
+                applyDate+
+                "</DATED>\n" +
+        "</APPLICATION_HEAD>\n" +
+        "<APPLICANT>\n" +
+            "<EMPNO>"+applicant.empNo+"</EMPNO>" +
+            "<NAME>"+applicant.name+"</NAME>"+
+            "<DESIGNATION>"+applicant.desigShortName+"</DESIGNATION>" +
+            "<DIVISION>"+applicant.divFullName+"</DIVISION>\n" +
+        "</APPLICANT>\n";
+    }
+    /**
+     * This method is started being used from EXTRA_WORK onwards
+     * @return 
+     */
+    private String getHTMLApplicationHead() {
+        //top table
+        int h1 = 70, h2 = 30;
+        String topTable =
+        HTML.getTableStartTag()+
+        "<tr height='"+h1+"'>"+//Header
+            "<td width='"+htmlTableWidth+"' align='center' valign='top'>" +
+            "<font size='5'>" +
+                organizationFullName +
+            "</font>" +
+            "<br>"+
+            "<font size='4' color='blue'>" +
+                "<u>Application for "+appFullName+"</u>" +
+            "</font>"+
+            "</td>"+
+        "</tr>"+
+        HTML.getTableEndTag(true);
+        //formID ApplyDate table
+        int w1 = 100, w2 = 250, w3 = 100, w4 = 250;
+        String formDetailTable =
+        HTML.getTableStartTag()+
+        "<tr height='"+h2+"'>"+//ref and date
+            HTML.getTableCellLT("FormID: ", w1, true)+
+            HTML.getTableCellT(appShortName+"/"+formID, w2, false)+
+            HTML.getTableCellT("Apply Date: ", w3, true)+
+            HTML.getTableCellT(applyDate, w4, false)+
+        "</tr>"+
+        HTML.getTableEndTag(true);
+        //applicant table
+        String applicantTable =
+        HTML.getTableStartTag() +
+        "<tr height='30'>" +//HEADER
+            HTML.getTableCellLT("<b>Applicant</b>", htmlTableWidth, 4) +
+         "</tr>" +
+        "<tr height='"+h2+"'>"+//empno and name
+            HTML.getTableCellL("EmpNo: ", w1, true)+
+            HTML.getTableCellA(applicant.empNo, w2, false)+
+            HTML.getTableCellA("Name: ", w3, true)+
+            HTML.getTableCellA(applicant.name, w4, false)+
+        "</tr>"+
+        "<tr height='"+h2+"'>"+//desig and division
+            HTML.getTableCellL("Designation: ", w1, true)+
+            HTML.getTableCellA(applicant.desigShortName, w2, false)+
+            HTML.getTableCellA("Division: ", w3, true)+
+            HTML.getTableCellA(applicant.divFullName, w4, false)+
+        "</tr>"+
+        HTML.getTableEndTag(true);
+        //
+        return
+        topTable+
+        formDetailTable+
+        applicantTable;
+    }
+    /**
+     * put one \n at the end
+     * @param auth
+     * @param authSNo
+     * @return 
+     */
+    protected abstract String getXMLApplicationData(BARCAuthSign auth, int authSNo);
+    /**
+     * 
+     * @param auth
+     * @param authSNo
+     * @return 
+     */
+    protected String getXMLFull(BARCAuthSign auth, int authSNo) {
+        if(frameWorkVersion < 2){//frameWorkVersion == 1 older than extra work reg
+            StringBuilder xml = new StringBuilder(getXMLApplicationData(auth, authSNo));
+            for(int i= 0;i<INTOfSigns;i++){
+                xml.append("\n");
+                xml.append(getAuthTagXML(authSignsList[i]));
+            }
+            return xml.toString();
+        } else {//frameWorkVersion == 2 from extra work reg onwards
+            StringBuilder xml = new StringBuilder(getXMLApplicationHead());
+            xml.append(getXMLApplicationData(auth, authSNo));
+            for(int i= 0;i<INTOfSigns;i++){
+                xml.append("\n");
+                xml.append(getAuthTagXML(authSignsList[i]));
+            }
+            xml.append("\nNote: -"
+                    + "\n    1. To verify sign of any authority using external application append tag of that authority only."
+                    + "\n    2. There is a new line character at the end of each authority tag."
+                    + "\n    3. Byte array from the xml string is created using UTF-8 encoding.");
+            return xml.toString();
+        }
+    }
+    /**
+     * 
+     * @param authNo
+     * @return '' 
+     */
+    private String getXMLForAuth(int authNo) {
+        if(frameWorkVersion < 2){
+            return getXMLApplicationData(authSignsList[authNo], authNo)
+                   +"\n"
+                   +getAuthTagXML(authSignsList[authNo]);
+        }else{
+            return  getXMLApplicationHead()
+                    //from version 2, getXMLApplicationData will not add header and applicant tag
+                   + getXMLApplicationData(authSignsList[authNo], authNo)
+                    //from version 2, one line gap between data and auth tag removed
+                    //application xml data is expected to be ended with \n
+                   +getAuthTagXML(authSignsList[authNo]);
+        }
+    }
+    /**
+     * 
+     * @param auth
+     * @return '' 
+     */
+    protected String getAuthTagXML(BARCAuthSign auth){
+        //00:00:00 is removed because old signs are done only with dd/mm/yyyy
+        return 
+         "<"+auth.role+">\n" +
+            "<EMPNO>"+auth.empNo+"</EMPNO>\n" +
+            "<ACTION>"+auth.action+"</ACTION>\n" +
+            "<SIGN_DATE>"+(auth.signDate.endsWith("00:00:00")?auth.signDate.substring(0, 10):auth.signDate)+"</SIGN_DATE>\n"+
+            "<CERT SNO>"+auth.cert_sno+"</CERT SNO>\n"+
+        "</"+auth.role+">\n";
+    }
+    /**
+     * 
+     * @return '' 
+     */
+    protected abstract String getHTMLApplicationData();//Only basic data
+    /**
+     * 
+     * @param authNo
+     * @return 
+     */
+    protected String getAuthTagHTML(int authNo){
+        String remark = authSignsList[authNo].remarks;
+        if(remark == null){
+            remark = "";
+        }
+        if(remark.trim().equals("")){
+            remark = "&nbsp;";
+        }
+        String actionTD = authSignsList[authNo].action;
+        String ramarkTD = remark;
+        if(authNo == authSignIndex){
+            actionTD = "<font color='blue'>"+authSignsList[authNo].action+"</font>";
+            ramarkTD = "<font color='blue'>"+remark+"</font>";
+        }
+        //Table styles
+        int w1 = 100, w2 = 250, w3 = 100, w4 = 250;
+        String authTable = 
+        HTML.getTableStartTag() 
+            + "<tr height='30'>" 
+                + HTML.getTableCellLT("<b>"+authSignsList[authNo].role+"</b>", htmlTableWidth, 4) 
+            + "</tr>" 
+            + "<tr height='30'>" 
+                + HTML.getTableCellL("EmpNo: ", w1, true) 
+                + HTML.getTableCellA(authSignsList[authNo].empNo, w2, false) 
+                + HTML.getTableCellA("Name: ", w3, true) 
+                + HTML.getTableCellA(authSignsList[authNo].name, w4, false) 
+            + "</tr>" 
+            + "<tr height='30'>" 
+                + HTML.getTableCellL("Designation: ", w1, true) 
+                + HTML.getTableCellA(authSignsList[authNo].desigShortName, w2, false) 
+                + HTML.getTableCellA("Cert S.No.: ", w3, true) 
+                + HTML.getTableCellA(authSignsList[authNo].cert_sno, w4, false) 
+            + "</tr>" 
+            + "<tr height='30'>" 
+                + HTML.getTableCellL("Action: ", w1, true) 
+                + HTML.getTableCellA(actionTD, w2, false) 
+                + HTML.getTableCellA("Date of sign: ", w3, true) 
+                + HTML.getTableCellA(authSignsList[authNo].signDate, w4, false) 
+            + "</tr>" 
+            + "<tr height='30'>" 
+                + HTML.getTableCellL("Remarks: ", w1, true) 
+                + HTML.getTableCellA(ramarkTD, (w2+w3+w4), 3) 
+            + "</tr>" 
+        + HTML.getTableEndTag(true);
+        return authTable;
+    }
+    /**
+     *
+     * @throws Exception
+     */
+    public void getDateChecks() throws Exception{
+        if(appShortName.equals("NOT_SET")){
+            throw new Exception("APP_NAME_NOT_SET");
+        }
+        getDateChecks(appShortName);
+    }
+    /**
+     * 
+     * @param appShortName
+     * @throws Exception 
+     */
+    public void getDateChecks(String appShortName) throws Exception{
+        MSC msc = PKI.getMSC("MusterServlet");
+        msc.println("get_date_checks");
+        msc.println(appShortName);
+        String response = msc.readLine();
+        msc.close();
+        if (response.startsWith("ERROR")) {
+            throw new Exception(response);
+        }
+        //showMessage(response);
+        Depacketizer d = new Depacketizer(response);
+        //get today date
+        maxDays = d.getInt();
+        pastDays = d.getInt();
+        futureDays = d.getInt();
+    }
+    /**
+     * added on 30/09/2015
+     * @param formID
+     * @return '' 
+     */
+    public String getShortDetails(String formID){
+        return appShortName+" application - "+formID;
+    }
+    /**
+     * added on 30/09/2015
+     * @throws Exception 
+     */
+    protected void validateData() throws Exception{
+        //override this method and write validation code
+        //this method is not made abstract because of some old application
+        //does not have this method.
+    }
+
+    private String getStatusAndRemarksTable() {
+        String statusAndRemarksTable = 
+        HTML.getTableStartTag() 
+            + "<tr height='35'>" 
+                + HTML.getTableCellLT("Current Status:", 150, true) 
+                + HTML.getTableCellT(currentStatus, 200, false) 
+                + HTML.getTableCellT("Auth.EmpNo:", 150, true) 
+                + HTML.getTableCellT(pendingWithAuthEmpNo, 200, false) 
+            + "</tr>" 
+            + "<tr height='35'>" 
+                + HTML.getTableCellL("Remarks:", 150, true) 
+                + HTML.getTableCellA(remarks, 550, 3) 
+            + "</tr>" 
+        + "</TABLE>";
+        return statusAndRemarksTable;
+    }
+}
+
+
+package BOOSTAppletCode.WorkFlowApps.PROPermitApplication;
+
+import BOOST_WORKFLOW_LIB.application_form.ApplicationForm;
+import BOOST_WORKFLOW_LIB.html.HTML;
+import java.io.Serializable;
+import BOOST_WORKFLOW_LIB.application_form.BARCAuthSign;
+/**
+ * 
+ * @author Gurmeet Singh, gsdhillon@gmail.com
+ */
+public class PROPermitForm extends ApplicationForm implements Serializable {
+public static final int FRAMEWORK_VERSION = 2;
+    public static final String APP_SHORT_NAME = "PROPermit";
+    public static final String APP_FULL_NAME = "PRO Permit";
+    public static final String SERVLET_NAME = "PROPermitObjectServlet";
+    public static final int CURRENT_XML_VERSION = 1;
+    //application data
+    public String dateOfVisit;
+    public String expectedTime;
+    public String purpose;
+    public PROVisitor[] visitors;
+    /**
+     */
+    public PROPermitForm(){
+        super(
+                FRAMEWORK_VERSION, 
+                APP_SHORT_NAME, 
+                APP_FULL_NAME, 
+                SERVLET_NAME, 
+                CURRENT_XML_VERSION
+        );
+    }
+    /**
+     * 
+     * @param formID
+     * @return
+     * @throws Exception 
+     */
+    public static PROPermitForm getForm(String formID) throws Exception{
+        ApplicationForm applicationForm = ApplicationForm.getForm(SERVLET_NAME, formID);
+        if(!(applicationForm instanceof PROPermitForm)){
+            throw new Exception("Object received from the server is not an instanceof  '"+APP_SHORT_NAME+"'");
+        }
+        return (PROPermitForm) applicationForm;
+    }
+    /**
+     * 
+     * @return
+     */
+    @Override
+    protected String getXMLApplicationData(BARCAuthSign auth, int authSNo) {
+        String xml =
+        "<PRO_PERMIT_DETAILS>\n"+
+        "<DATE_OF_VISIT>"+dateOfVisit+"</DATE_OF_VISIT>\n"+
+        "<EXPECTED_TIME>"+expectedTime+"</EXPECTED_TIME>\n"+
+        "<PURPOSE>"+purpose+"</PURPOSE>\n"+
+        "<VISITORS_LIST>\n";
+        for(int i=0;i<visitors.length;i++){
+            xml+= visitors[i].getXMLTag(xmlVersion);
+        }
+        xml+=
+        "</VISITORS_LIST>\n"+
+        "</PRO_PERMIT_DETAILS>\n";
+        return xml;
+    }
+    /**
+     * 
+     * @return
+     */
+    @Override
+    protected String getHTMLApplicationData() {
+        //make HTML text
+        int h2 = 30;
+        
+        //work detail
+        int rw1 = 100, rw2 = 250, rw3=100, rw4 = 250;
+        String proPermitDetails =
+        HTML.getTableStartTag() +
+        "<tr height='"+h2+"'>"+
+            HTML.getTableCellHeader("PRO Permit Details", htmlTableWidth, 4, false)+
+        "</tr>"+
+        "<tr height='"+h2+"'>"+
+            HTML.getTableCellL("Date of Visit: ", rw1, true)+
+            HTML.getTableCellA(dateOfVisit, rw2, false)+
+            HTML.getTableCellA("Expected Time: ", rw3, true)+
+            HTML.getTableCellA(expectedTime, rw4, false)+
+        "</tr>"+
+        "<tr height='"+h2+"'>"+
+            HTML.getTableCellL("Purpose: ", rw1, true)+
+            HTML.getTableCellA(purpose, rw2, 3)+
+        "</tr>"+
+        HTML.getTableEndTag(true);
+
+        //work location
+        String visitorsList =
+        HTML.getTableStartTag() +
+        "<tr height='"+h2+"'>"+
+            HTML.getTableCellHeader("Visitors List", htmlTableWidth, 10, false)+
+        "</tr>"+        
+        PROVisitor.getHTMLTableHeader(h2);
+        for(int i=0;i<visitors.length;i++){
+            visitorsList += visitors[i].getHTMLTableRow(i+1, h2);
+        }
+        visitorsList += HTML.getTableEndTag(true);
+
+        //
+        return
+                proPermitDetails + 
+                visitorsList;
+    }
+    /**
+     *
+     * @throws Exception
+     */
+    @Override
+    public void validateData() throws Exception{
+        if (dateOfVisit == null || dateOfVisit.length() != 10) {
+            throw new Exception("Invalid Date of Visit");
+        }
+        if (expectedTime == null || expectedTime.length() != 8) {
+            throw new Exception("Invalid TimeTo");
+        }
+        if (purpose == null || purpose.length() < 10) {
+            throw new Exception("Enter purpose >= 10");
+        }
+        for(int i=0;i<visitors.length;i++){
+            visitors[i].validateData(i+1);
+        }
+        
+    }
+}
+
+
+
+
+
+
+package BOOSTAppletCode.WorkFlowApps.PROPermitApplication;
+
+import BOOST_WORKFLOW_LIB.html.HTML;
+import java.io.Serializable;
+
+
+/**
+ * 
+ * @author Gurmeet
+ */
+public class PROVisitor implements Serializable{
+    public int sno;
+    public String name;
+    public String gender;
+    public String age;
+    public String idType;
+    public String idNo;
+//    public String address;
+//    public String city;
+//    public String state;
+//    public String pin;
+    public String phone;
+    public String org;
+    public String desig;
+    public String issueRFIDCard;
+    
+    public int getAge() throws Exception{
+        try{
+            return Integer.parseInt(age);
+        }catch(Exception e){
+            throw new Exception("Entered value of age is not a INT !");
+        }
+    }
+    
+    /**
+     * 
+     * @param index
+     * @throws Exception 
+     */
+    public void validateData(int index) throws Exception{
+        if(name == null || name.length() < 3){
+            throw new Exception("Invalid name (< 3 char) at entry "+index);
+        }
+    }
+    /**
+     * 
+     * @param xmlVersion
+     * @return 
+     */
+    public String getXMLTag(int xmlVersion){
+        return 
+            "<VISITOR>" +
+            "<NAME>"+name+"</NAME>" +
+            "<GENDER>"+gender+"</GENDER>" +
+            "<AGE>"+age+"</AGE>" +
+            "<ORGANISATION>"+org+"</ORGANISATION>" +
+            "<DESIGNATION>"+desig+"</DESIGNATION>" +    
+//            "<ADDRESS>"+address+"</ADDRESS>" +
+//            "<CITY>"+city+"</CITY>" +
+//            "<STATE>"+state+"</STATE>" +
+//            "<PIN>"+pin+"</PIN>" +
+            "<ISSUE_RFID_CARD>"+issueRFIDCard+"</ISSUE_RFID_CARD>" +
+            "</VISITOR>\n";
+    }
+    /**
+     * HTML text
+     */
+    private static final int rw1 = 50, rw2 = 100, rw3=50, rw4 = 50, rw5=100, rw6 = 100, rw7=100, rw8=50, rw9=50, rw10=50;
+    /**
+     * 
+     * @param rowHeight
+     * @return 
+     */
+    public static String getHTMLTableHeader(int rowHeight){
+        return
+        "<tr height='"+rowHeight+"'>"+
+            HTML.getTableCellL("S.No.", rw1, true)+
+            HTML.getTableCellA("Name", rw2, true)+
+            HTML.getTableCellA("Gender", rw3, true)+
+            HTML.getTableCellA("Age", rw4, true)+
+            HTML.getTableCellA("Organisation", rw5, true)+
+            HTML.getTableCellA("Designation", rw6, true)+
+            HTML.getTableCellA("Phone", rw7, true)+
+            HTML.getTableCellA("IdType", rw8, true)+
+//            HTML.getTableCellA("Address", rw5, true)+
+//            HTML.getTableCellA("City", rw6, true)+
+//            HTML.getTableCellA("State", rw7, true)+
+//            HTML.getTableCellA("PIN", rw8, true)+
+            HTML.getTableCellA("IdNo", rw9, true)+
+            HTML.getTableCellA("Issue RFID", rw10, true)+
+        "</tr>";
+    }
+    /**
+     * 
+     * @param sNo
+     * @param rowHeight
+     * @return 
+     */
+    public String getHTMLTableRow(int sNo, int rowHeight){
+        return
+        "<tr height='"+rowHeight+"'>"+
+            HTML.getTableCellL(sNo+".", rw1, false)+
+            HTML.getTableCellA(name, rw2, false)+
+            HTML.getTableCellA(gender, rw3, false)+
+            HTML.getTableCellA(age, rw4, false)+
+            HTML.getTableCellA(org, rw5, false)+
+            HTML.getTableCellA(desig, rw6, false)+
+            HTML.getTableCellA(phone, rw7, false)+
+            HTML.getTableCellA(idType, rw8, false)+
+//            HTML.getTableCellA(address, rw5, false)+
+//            HTML.getTableCellA(city, rw6, false)+
+//            HTML.getTableCellA(state, rw7, false)+
+//            HTML.getTableCellA(pin, rw8, false)+
+            HTML.getTableCellA(idNo, rw9, false)+
+            HTML.getTableCellA(issueRFIDCard, rw10, false)+
+        "</tr>";
+    }
+}

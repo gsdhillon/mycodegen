@@ -1,0 +1,46 @@
+<XML>
+	<ProRecord>
+		<FormId>1</FormId>
+		<ApplyDate>08/24/2019</ApplyDate>
+		<DateOfVisit>08/25/2019</DateOfVisit>
+		<ExpectedTime>09:00:00</ExpectedTime>
+		<Purpose>Purpose of visit</Purpose>
+	</ProRecord>
+	<ProApplicant>
+		<FormId>1</FormId>
+		<EmpNo>24196</EmpNo>
+		<Name>Gurmeet Singh</Name>
+		<DivisisionNo>304</DivisisionNo>
+		<DivisionFullName>Computer Division</DivisionFullName>
+		<DesigShortName>SO/F</DesigShortName>
+	</ProApplicant>
+	<ProVisitorList>
+		<ProVisitor>
+			<FormId>1</FormId>
+			<SNo>1</SNo>
+			<Name>Ishjyot Kaur</Name>
+			<PhoneNo>9869117976</PhoneNo>
+			<Org>AECS-04</Org>
+			<Desig>Student</Desig>
+			<Dob>11/14/2006</Dob>
+		</ProVisitor>
+		<ProVisitor>
+			<FormId>1</FormId>
+			<SNo>2</SNo>
+			<Name>Ajaybir Singh</Name>
+			<PhoneNo>9757163176</PhoneNo>
+			<Org>AECS-04</Org>
+			<Desig>Student</Desig>
+			<Dob>09/23/2004</Dob>
+		</ProVisitor>
+		<ProVisitor>
+			<FormId>1</FormId>
+			<SNo>3</SNo>
+			<Name>Ardas Kaur</Name>
+			<PhoneNo>9757163176</PhoneNo>
+			<Org>House</Org>
+			<Desig>Family</Desig>
+			<Dob>12/03/1977</Dob>
+		</ProVisitor>
+	</ProVisitorList>
+</XML>
