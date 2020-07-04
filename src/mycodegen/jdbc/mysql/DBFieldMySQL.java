@@ -8,8 +8,8 @@ import mycodegen.jdbc.DBField;
  * @author Gurmeet Singh, gsdhillon@gmail.com
  */
 public class DBFieldMySQL extends DBField{
-    private final String dateFormat = "%m/%d/%Y";
-    private final String dateTimeFormat = "%m/%d/%Y %H:%i:%s";
+    private final String dateFormat = "%d/%m/%Y";
+    private final String dateTimeFormat = "%d/%m/%Y %H:%i:%s";
 
     @Override
     protected String getStrToDateParam() throws Exception{

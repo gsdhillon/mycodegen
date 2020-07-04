@@ -5,8 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * DB tables one master-details branch at a time from bottom to up
- * TODO - Full Tree implementation pending
  * @author Gurmeet Singh, gsdhillon@gmail.com
  */
 public class DBNode{
